@@ -1,0 +1,3 @@
+[submodule "PyGraph"]
+	path = PyGraph
+	url = https://github.com/hanchhanch/PyGraph.git
