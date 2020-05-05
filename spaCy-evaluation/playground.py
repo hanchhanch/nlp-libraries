@@ -1,6 +1,6 @@
-
+import re
+import json
 import spacy
-from spacy import displacy
 
 TEXT = "Dopamine (DA, a contraction of 3,4-dihydroxyphenethylamine) is an organic chemical of the catecholamine and phenethylamine families. " + \
     "It functions both as a hormone and a neurotransmitter, and plays several important roles in the brain and body. "+ \
@@ -19,18 +19,60 @@ eng = spacy.load(model)
 doc = eng(TEXT)
 
 # tokens
+print("tokens\n")
 for token in doc:
-    print("text: %s, pos: %s, dep: %s" % (token.text, token.pos_, token.dep_))
+    print("%s|\t, pos: %s, DEP: %s, ROOT: %s" % (token.text, token.pos_, token.dep_, token))
 
 # entities
-for ent in doc.ents:
-    print("text: %s, desc: %s" % (ent.text, ent.desc))
+print("entities\n")
+ents = [(e.text, e.label_, e.kb_id_) for e in doc.ents]
+print(ents)
+
+# noun chunks
+for chunk in doc.noun_chunks:
+    print("%s|\t ROOT: %s, DEP:%s, ROOT HEAD: %s" %(chunk.text, chunk.root.text, chunk.root.dep_,
+            chunk.root.head.text))
 
 
-with open(r"d:\temp\temp.svg", "w") as f:
-    f.write(displacy.render(next(doc.sents), style='dep'))
-    
-displacy.serve(next(doc.sents), style='dep')
+def label_to_id(label):
+    return re.sub('[^A-Za-z0-9_]+', '', label)
+
+#Create a graph object
+sent = next(doc.sents)
+nodes = {}
+edges = {}
+for token in doc:
+    if token.sent != sent:
+        break
+
+    #Creating the word instance
+    node_id = str(token.idx)
+    nodes[node_id] = {'data':{'label': str(token.text), 'id':node_id}}
+
+    #Adding the lemma node if not existing
+    lemma_id = label_to_id("_L_" + token.lemma_)
+    if (lemma_id!="" and lemma_id not in nodes):
+        nodes[lemma_id] = {'data':{'label': "[L]" + token.lemma_, 'id':lemma_id}}
+
+    #edge between the tokens
+    edge_id = label_to_id(str(token.head.idx)+"_"+ str(token.idx))
+    if (edge_id not in edges):
+        edges[edge_id] = {'data':{'id': edge_id, 'source': str(token.head.idx), 'target':str(token.idx), 'weight': 1 }}
+
+    lemma_edge_id = label_to_id(token.head.lemma_+"_"+ token.lemma_)
+    #edge between the lemmas
+    if (lemma_edge_id in edges):
+        updated_edge = edges[lemma_edge_id]
+        updated_edge['data']['weight'] = updated_edge['data']['weight'] + 1
+        edges[lemma_edge_id] = updated_edge
+    else:
+        source_id = label_to_id("_L_" + token.head.lemma_)
+        target_id = label_to_id("_L_" + token.lemma_)
+        edges[lemma_edge_id] = {'data':{'id': lemma_edge_id, 'source': source_id, 'target': target_id, 'weight': 1 }}
+
+graph = list(nodes.values()) + list(edges.values())
+with open(r'd:\temp\graph.json', 'w') as outfile:
+    json.dump(graph, fp=outfile, indent=4)
 
 
 
